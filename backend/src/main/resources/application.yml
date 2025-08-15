@@ -30,6 +30,10 @@ management:
       probes:
         enabled: true
 
+logging:
+  level:
+    org.springframework.security: DEBUG
+
 app:
   security:
     jwt:

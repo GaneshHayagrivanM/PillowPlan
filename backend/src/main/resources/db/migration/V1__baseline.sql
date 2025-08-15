@@ -31,18 +31,18 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Validate arrays
+-- Validate arrays (no subqueries allowed in CHECK constraints in Postgres)
 ALTER TABLE tasks
   ADD CONSTRAINT chk_weekly_days_values CHECK (
     weekly_days IS NULL OR (
-      array_length(weekly_days, 1) BETWEEN 1 AND 7 AND
-      (SELECT bool_and(v BETWEEN 1 AND 7) FROM unnest(weekly_days) AS v)
+      cardinality(weekly_days) BETWEEN 1 AND 7 AND
+      weekly_days <@ ARRAY[1,2,3,4,5,6,7]
     )
   ),
   ADD CONSTRAINT chk_monthly_days_values CHECK (
     monthly_days IS NULL OR (
-      array_length(monthly_days, 1) BETWEEN 1 AND 31 AND
-      (SELECT bool_and(v BETWEEN 1 AND 31) FROM unnest(monthly_days) AS v)
+      cardinality(monthly_days) BETWEEN 1 AND 31 AND
+      monthly_days <@ ARRAY[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31]
     )
   );
 

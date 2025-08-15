@@ -29,6 +29,11 @@ public class AuthController {
     public record RegisterRequest(@Email String email, @NotBlank String password, @NotBlank String timezone) {}
     public record LoginRequest(@Email String email, @NotBlank String password) {}
 
+    @GetMapping("/ping")
+    public Map<String, String> ping() {
+        return Map.of("status", "ok");
+    }
+
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest req) {
         if (users.findByEmail(req.email()).isPresent()) {
@@ -42,7 +47,7 @@ public class AuthController {
         return ResponseEntity.created(URI.create("/api/users/me")).body(Map.of("id", saved.getId()));
     }
 
-    @PostMapping("/login")
+    @PostMapping("/signin")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest req) {
         return users.findByEmail(req.email())
                 .filter(u -> encoder.matches(req.password(), u.getPasswordHash()))
