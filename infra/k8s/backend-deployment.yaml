@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: gcr.io/YOUR_PROJECT/monthly-backend:latest
+          image: REGION-docker.pkg.dev/PROJECT_ID/monthly-backend/backend:TAG
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

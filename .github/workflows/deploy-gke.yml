@@ -1,0 +1,98 @@
+name: CD - Build Images and Deploy to GKE
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'GCP Project ID'
+        required: true
+      region:
+        description: 'GCP Region (for Artifact Registry)'
+        required: true
+        default: 'us-central1'
+      cluster_name:
+        description: 'GKE Cluster name'
+        required: true
+      cluster_location:
+        description: 'GKE location (region/zone)'
+        required: true
+      repo_backend:
+        description: 'Artifact Registry repo for backend images'
+        required: true
+        default: 'monthly-backend'
+      repo_frontend:
+        description: 'Artifact Registry repo for frontend images'
+        required: true
+        default: 'monthly-frontend'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: ${{ inputs.project_id }}
+      REGION: ${{ inputs.region }}
+      CLUSTER_NAME: ${{ inputs.cluster_name }}
+      CLUSTER_LOCATION: ${{ inputs.cluster_location }}
+      REPO_BACKEND: ${{ inputs.repo_backend }}
+      REPO_FRONTEND: ${{ inputs.repo_frontend }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Build backend JAR
+        run: |
+          cd backend
+          ./mvnw -q -DskipTests package || mvn -q -DskipTests package
+
+      - name: Build & push backend image
+        run: |
+          IMAGE_BACKEND="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_BACKEND/backend:$(git rev-parse --short HEAD)"
+          docker build -t "$IMAGE_BACKEND" -f infra/docker/backend/Dockerfile .
+          docker push "$IMAGE_BACKEND"
+
+      - name: Build & push frontend image
+        run: |
+          IMAGE_FRONTEND="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_FRONTEND/frontend:$(git rev-parse --short HEAD)"
+          docker build -t "$IMAGE_FRONTEND" -f infra/docker/frontend/Dockerfile .
+          docker push "$IMAGE_FRONTEND"
+
+      - name: Get GKE credentials
+        run: gcloud container clusters get-credentials "$CLUSTER_NAME" --location "$CLUSTER_LOCATION" --project "$PROJECT_ID"
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f infra/k8s/namespace.yaml
+          kubectl -n monthly-task-tracker apply -f infra/k8s/configmap.yaml
+          # Secrets must exist beforehand or be created from repo/environment
+          # kubectl -n monthly-task-tracker apply -f infra/k8s/secrets.yaml
+
+          # Patch images in Deployments
+          kubectl -n monthly-task-tracker set image deployment/backend backend="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_BACKEND/backend:$(git rev-parse --short HEAD)"
+          kubectl -n monthly-task-tracker set image deployment/frontend frontend="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_FRONTEND/frontend:$(git rev-parse --short HEAD)"
+
+          # Apply services and ingress
+          kubectl -n monthly-task-tracker apply -f infra/k8s/backend-deployment.yaml
+          kubectl -n monthly-task-tracker apply -f infra/k8s/frontend-deployment.yaml
+          kubectl -n monthly-task-tracker apply -f infra/k8s/ingress.yaml
