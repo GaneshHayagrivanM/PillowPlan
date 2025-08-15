@@ -1,0 +1,27 @@
+# Node
+node_modules/
+*.log
+
+# TypeScript
+*.tsbuildinfo
+
+# Java / Maven
+backend/target/
+**/.classpath
+**/.project
+**/.settings/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+**/.env
+
+# Build artifacts
+frontend/dist/
