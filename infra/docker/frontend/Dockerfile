@@ -1,10 +1,12 @@
 # Build stage
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
-COPY frontend/package.json frontend/tsconfig.json frontend/vite.config.ts ./
-COPY frontend/src ./src
-COPY frontend/index.html ./
-RUN npm ci || npm i && npm run build
+# Install dependencies using lockfile for reproducible builds
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+# Copy sources and build
+COPY frontend/ .
+RUN npm run build
 
 # Runtime stage
 FROM nginx:1.27-alpine
